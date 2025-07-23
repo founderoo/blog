@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata = {
   title: "Founderoo - Build in Public Blog",
   description: "A community for founders to share their journey",
-    generator: 'v0.dev'
+    
 }
 
 export default function RootLayout({

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { Sun, Moon, Menu, X, LogOut, AlertTriangle } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 
 interface LayoutProps {
@@ -58,11 +59,18 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">F</span>
+              <div className="w-8 h-8 flex items-center justify-center">
+                <Image
+                  src="/founderoo.webp"
+                  alt="Founderoo Logo"
+                  width={24}
+                  height={24}
+                  className="object-contain"
+                />
               </div>
-              <span className="font-bold text-xl">Founderoo</span>
+              <span className="font-bold text-xl">Founderoo Blog</span>
             </Link>
+
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-8">

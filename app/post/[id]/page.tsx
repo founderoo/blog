@@ -44,6 +44,7 @@ interface Post {
 
 export default function PostPage() {
   const params = useParams()
+  if (!params) return null
   const postId = params.id as string
   const [post, setPost] = useState<Post | null>(null)
   const [relatedPosts, setRelatedPosts] = useState<Post[]>([])
