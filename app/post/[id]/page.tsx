@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import {
   doc,
   getDoc,
@@ -14,108 +14,145 @@ import {
   arrayUnion,
   arrayRemove,
   increment,
-} from "firebase/firestore"
-import { db } from "@/lib/firebase"
-import { useAuth } from "@/contexts/AuthContext"
-import { ArrowUp, MessageCircle, Share, Flag, Calendar, Eye, Clock, ExternalLink } from "lucide-react"
-import Link from "next/link"
-import ImageModal from "@/components/ImageModal"
-import CloudinaryImage from "@/components/CloudinaryImage"
-import LoadingSpinner from "@/components/LoadingSpinner"
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  ArrowUp,
+  MessageCircle,
+  Share,
+  Flag,
+  Calendar,
+  Eye,
+  Clock,
+  ExternalLink,
+} from "lucide-react";
+import Link from "next/link";
+import ImageModal from "@/components/ImageModal";
+import CloudinaryImage from "@/components/CloudinaryImage";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import Comments from "@/components/Comments";
+
+interface Comment {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  content: string;
+  createdAt: any;
+  updatedAt?: any;
+  likes: number;
+  likedBy: string[];
+  replies?: Comment[];
+  parentId?: string; // For nested replies
+}
 
 interface Post {
-  id: string
-  title: string
-  content: string
-  category: string
-  tags: string[]
-  images: string[] // Cloudinary URLs
-  authorId: string
-  authorName: string
-  createdAt: any
-  updatedAt?: any
-  likes: number
-  comments: number
-  shares: number
-  reports: number
-  views?: number
-  likedBy: string[]
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  tags: string[];
+  images: string[]; // Cloudinary URLs
+  authorId: string;
+  authorName: string;
+  createdAt: any;
+  updatedAt?: any;
+  likes: number;
+  comments: number;
+  shares: number;
+  reports: number;
+  views?: number;
+  likedBy: string[];
 }
 
 export default function PostPage() {
-  const params = useParams()
-  if (!params) return null
-  const postId = params.id as string
-  const [post, setPost] = useState<Post | null>(null)
-  const [relatedPosts, setRelatedPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [selectedImage, setSelectedImage] = useState<{ src: string; alt: string } | null>(null)
-  const { user } = useAuth()
+  const params = useParams();
+  const postId = params.id as string;
+  const [post, setPost] = useState<Post | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{
+    src: string;
+    alt: string;
+  } | null>(null);
+  const { user } = useAuth();
+  const [commentsCount, setCommentsCount] = useState(0);
+
+  // Add this new useEffect after your existing useEffect
+  useEffect(() => {
+    if (post) {
+      setCommentsCount(post.comments || 0);
+      console.log("📊 Comments count set to:", post.comments || 0);
+    }
+  }, [post]);
 
   useEffect(() => {
     if (postId) {
-      fetchPost()
-      incrementViewCount()
+      fetchPost();
+      incrementViewCount();
     }
-  }, [postId])
+  }, [postId]);
 
   const fetchPost = async () => {
     try {
-      const postDoc = await getDoc(doc(db, "posts", postId))
+      const postDoc = await getDoc(doc(db, "posts", postId));
       if (postDoc.exists()) {
-        const postData = { id: postDoc.id, ...postDoc.data() } as Post
-        setPost(postData)
+        const postData = { id: postDoc.id, ...postDoc.data() } as Post;
+        setPost(postData);
+        setCommentsCount(postData.comments || 0); // Set comments count here
 
         // Fetch related posts
         const relatedQuery = query(
-          collection(db, "posts"), 
-          where("category", "==", postData.category), 
+          collection(db, "posts"),
+          where("category", "==", postData.category),
           limit(6)
-        )
-        const relatedSnapshot = await getDocs(relatedQuery)
+        );
+        const relatedSnapshot = await getDocs(relatedQuery);
         const relatedData = relatedSnapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }) as Post)
-          .filter((p) => p.id !== postId)
+          .map((doc) => ({ id: doc.id, ...doc.data() } as Post))
+          .filter((p) => p.id !== postId);
 
-        setRelatedPosts(relatedData.slice(0, 5))
+        setRelatedPosts(relatedData.slice(0, 5));
       }
     } catch (error) {
-      console.error("Error fetching post:", error)
+      console.error("Error fetching post:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const incrementViewCount = async () => {
     try {
-      const postRef = doc(db, "posts", postId)
+      const postRef = doc(db, "posts", postId);
       await updateDoc(postRef, {
-        views: increment(1)
-      })
+        views: increment(1),
+      });
     } catch (error) {
-      console.error("Error incrementing view count:", error)
+      console.error("Error incrementing view count:", error);
     }
-  }
+  };
 
   const handleLike = async () => {
-    if (!user || !post) return
+    if (!user || !post) return;
 
-    setActionLoading('like')
-    const isLiked = post.likedBy.includes(user.uid)
-    const postRef = doc(db, "posts", postId)
+    setActionLoading("like");
+    const isLiked = post.likedBy.includes(user.uid);
+    const postRef = doc(db, "posts", postId);
 
     try {
       if (isLiked) {
         await updateDoc(postRef, {
           likes: increment(-1),
           likedBy: arrayRemove(user.uid),
-        })
+        });
       } else {
         await updateDoc(postRef, {
           likes: increment(1),
           likedBy: arrayUnion(user.uid),
-        })
+        });
       }
 
       setPost((prev) =>
@@ -123,29 +160,31 @@ export default function PostPage() {
           ? {
               ...prev,
               likes: isLiked ? prev.likes - 1 : prev.likes + 1,
-              likedBy: isLiked ? prev.likedBy.filter((id) => id !== user.uid) : [...prev.likedBy, user.uid],
+              likedBy: isLiked
+                ? prev.likedBy.filter((id) => id !== user.uid)
+                : [...prev.likedBy, user.uid],
             }
-          : null,
-      )
+          : null
+      );
     } catch (error) {
-      console.error("Error updating like:", error)
+      console.error("Error updating like:", error);
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
-  }
+  };
 
   const handleShare = async () => {
-    if (!post) return
+    if (!post) return;
 
-    setActionLoading('share')
-    const postRef = doc(db, "posts", postId)
-    
+    setActionLoading("share");
+    const postRef = doc(db, "posts", postId);
+
     try {
       await updateDoc(postRef, {
         shares: increment(1),
-      })
+      });
 
-      setPost((prev) => (prev ? { ...prev, shares: prev.shares + 1 } : null))
+      setPost((prev) => (prev ? { ...prev, shares: prev.shares + 1 } : null));
 
       // Enhanced sharing with fallback
       if (navigator.share) {
@@ -153,70 +192,74 @@ export default function PostPage() {
           title: post.title,
           text: getSummary(post.content),
           url: window.location.href,
-        })
+        });
       } else {
-        await navigator.clipboard.writeText(window.location.href)
-        alert("Link copied to clipboard!")
+        await navigator.clipboard.writeText(window.location.href);
+        alert("Link copied to clipboard!");
       }
     } catch (error) {
-      console.error("Error sharing post:", error)
+      console.error("Error sharing post:", error);
       // Fallback to clipboard
       try {
-        await navigator.clipboard.writeText(window.location.href)
-        alert("Link copied to clipboard!")
+        await navigator.clipboard.writeText(window.location.href);
+        alert("Link copied to clipboard!");
       } catch (clipboardError) {
-        console.error("Clipboard error:", clipboardError)
+        console.error("Clipboard error:", clipboardError);
       }
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
-  }
+  };
 
   const handleReport = async () => {
-    if (!user || !post) return
-    
-    const confirmed = window.confirm("Are you sure you want to report this post?")
-    if (!confirmed) return
+    if (!user || !post) return;
 
-    setActionLoading('report')
-    const postRef = doc(db, "posts", postId)
-    
+    const confirmed = window.confirm(
+      "Are you sure you want to report this post?"
+    );
+    if (!confirmed) return;
+
+    setActionLoading("report");
+    const postRef = doc(db, "posts", postId);
+
     try {
       await updateDoc(postRef, {
         reports: increment(1),
-      })
+      });
 
-      setPost((prev) => (prev ? { ...prev, reports: prev.reports + 1 } : null))
-      alert("Post reported. Thank you for helping keep our community safe.")
+      setPost((prev) => (prev ? { ...prev, reports: prev.reports + 1 } : null));
+      alert("Post reported. Thank you for helping keep our community safe.");
     } catch (error) {
-      console.error("Error reporting post:", error)
-      alert("Failed to report post. Please try again.")
+      console.error("Error reporting post:", error);
+      alert("Failed to report post. Please try again.");
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
     }
-  }
+  };
 
   const getSummary = (content: string) => {
-    const sentences = content.split(".").filter((s) => s.trim().length > 0)
-    return sentences.slice(0, 2).join(".") + (sentences.length > 2 ? "..." : "")
-  }
+    const sentences = content.split(".").filter((s) => s.trim().length > 0);
+    return (
+      sentences.slice(0, 2).join(".") + (sentences.length > 2 ? "..." : "")
+    );
+  };
 
   const formatDate = (timestamp: any) => {
-    if (!timestamp) return ""
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
+    if (!timestamp) return "";
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
-    })
-  }
+    });
+  };
 
   const getReadingTime = (content: string) => {
-    const wordsPerMinute = 200
-    const wordCount = content.split(/\s+/).length
-    const readingTime = Math.ceil(wordCount / wordsPerMinute)
-    return readingTime
-  }
+    const wordsPerMinute = 200;
+    const wordCount = content.split(/\s+/).length;
+    const readingTime = Math.ceil(wordCount / wordsPerMinute);
+    return readingTime;
+  };
 
   if (loading) {
     return (
@@ -225,7 +268,7 @@ export default function PostPage() {
           <LoadingSpinner />
         </div>
       </div>
-    )
+    );
   }
 
   if (!post) {
@@ -236,8 +279,8 @@ export default function PostPage() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             The post you're looking for doesn't exist or has been removed.
           </p>
-          <Link 
-            href="/" 
+          <Link
+            href="/"
             className="inline-flex items-center text-purple-600 hover:text-purple-700 font-medium"
           >
             <ArrowUp className="h-4 w-4 mr-2 rotate-180" />
@@ -245,7 +288,7 @@ export default function PostPage() {
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -270,12 +313,15 @@ export default function PostPage() {
                 ))}
               </div>
 
-              <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">{post.title}</h1>
+              <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
+                {post.title}
+              </h1>
 
               <div className="flex items-center justify-between flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <div className="flex items-center space-x-4">
                   <span className="flex items-center">
-                    By <span className="font-medium ml-1">@{post.authorName}</span>
+                    By{" "}
+                    <span className="font-medium ml-1">@{post.authorName}</span>
                   </span>
                   <div className="flex items-center space-x-1">
                     <Calendar className="h-4 w-4" />
@@ -286,7 +332,7 @@ export default function PostPage() {
                     <span>{getReadingTime(post.content)} min read</span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-4">
                   {post.views && (
                     <div className="flex items-center space-x-1">
@@ -313,11 +359,15 @@ export default function PostPage() {
             {/* Cloudinary Images */}
             {post.images.length > 0 && (
               <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-                <div className={`grid gap-4 ${
-                  post.images.length === 1 ? 'grid-cols-1' : 
-                  post.images.length === 2 ? 'grid-cols-1 md:grid-cols-2' :
-                  'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                }`}>
+                <div
+                  className={`grid gap-4 ${
+                    post.images.length === 1
+                      ? "grid-cols-1"
+                      : post.images.length === 2
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                  }`}
+                >
                   {post.images.map((imageUrl, index) => (
                     <div key={index} className="relative group">
                       <CloudinaryImage
@@ -326,12 +376,14 @@ export default function PostPage() {
                         width={post.images.length === 1 ? 800 : 400}
                         height={post.images.length === 1 ? 400 : 250}
                         className={`w-full object-cover rounded-lg cursor-pointer transition-all duration-300 group-hover:shadow-lg group-hover:scale-[1.02] ${
-                          post.images.length === 1 ? 'h-96' : 'h-64'
+                          post.images.length === 1 ? "h-96" : "h-64"
                         }`}
-                        onClick={() => setSelectedImage({ 
-                          src: imageUrl, 
-                          alt: `${post.title} - Image ${index + 1}` 
-                        })}
+                        onClick={() =>
+                          setSelectedImage({
+                            src: imageUrl,
+                            alt: `${post.title} - Image ${index + 1}`,
+                          })
+                        }
                       />
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 rounded-lg flex items-center justify-center">
                         <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -346,7 +398,10 @@ export default function PostPage() {
             <div className="p-6 border-b border-gray-200 dark:border-gray-800">
               <div className="prose dark:prose-invert max-w-none prose-purple">
                 {post.content.split("\n").map((paragraph, index) => (
-                  <p key={index} className="mb-4 leading-relaxed text-gray-800 dark:text-gray-200">
+                  <p
+                    key={index}
+                    className="mb-4 leading-relaxed text-gray-800 dark:text-gray-200"
+                  >
                     {paragraph.trim() && paragraph}
                   </p>
                 ))}
@@ -359,47 +414,56 @@ export default function PostPage() {
                 <div className="flex items-center space-x-6">
                   <button
                     onClick={handleLike}
-                    disabled={!user || actionLoading === 'like'}
+                    disabled={!user || actionLoading === "like"}
                     className={`flex items-center space-x-2 px-3 py-2 rounded-md transition-all duration-200 ${
-                      user && post.likedBy.includes(user.uid) 
-                        ? "text-purple-600 bg-purple-50 dark:bg-purple-900/30" 
+                      user && post.likedBy.includes(user.uid)
+                        ? "text-purple-600 bg-purple-50 dark:bg-purple-900/30"
                         : "text-gray-600 dark:text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30"
                     } disabled:opacity-50`}
                   >
                     <ArrowUp className="h-5 w-5" />
                     <span className="font-medium">
-                      {actionLoading === 'like' ? 'Loading...' : `${post.likes} upvotes`}
+                      {actionLoading === "like"
+                        ? "Loading..."
+                        : `${post.likes} upvotes`}
                     </span>
                   </button>
-                  
+
                   <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-400">
                     <MessageCircle className="h-5 w-5" />
-                    <span>{post.comments} comments</span>
+                    <span>{commentsCount} comments</span>
                   </div>
-                  
+
                   <button
                     onClick={handleShare}
-                    disabled={actionLoading === 'share'}
+                    disabled={actionLoading === "share"}
                     className="flex items-center space-x-2 px-3 py-2 rounded-md text-gray-600 dark:text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all duration-200 disabled:opacity-50"
                   >
                     <Share className="h-5 w-5" />
-                    <span>{actionLoading === 'share' ? 'Sharing...' : 'Share'}</span>
+                    <span>
+                      {actionLoading === "share" ? "Sharing..." : "Share"}
+                    </span>
                   </button>
                 </div>
-                
+
                 <button
                   onClick={handleReport}
-                  disabled={!user || actionLoading === 'report'}
+                  disabled={!user || actionLoading === "report"}
                   className="flex items-center space-x-2 px-3 py-2 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200 disabled:opacity-50"
                 >
                   <Flag className="h-4 w-4" />
                   <span className="text-sm">
-                    {actionLoading === 'report' ? 'Reporting...' : 'Report'}
+                    {actionLoading === "report" ? "Reporting..." : "Report"}
                   </span>
                 </button>
               </div>
             </div>
           </article>
+          <Comments
+            postId={postId}
+            commentsCount={commentsCount}
+            onCommentsCountChange={setCommentsCount}
+          />
         </div>
 
         {/* Related Posts Sidebar */}
@@ -413,7 +477,7 @@ export default function PostPage() {
                 </span>
               )}
             </h3>
-            
+
             {relatedPosts.length === 0 ? (
               <p className="text-gray-500 dark:text-gray-400 text-sm">
                 No related posts found.
@@ -436,7 +500,9 @@ export default function PostPage() {
                         {relatedPost.title}
                       </h4>
                       <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-                        <span className="truncate">@{relatedPost.authorName}</span>
+                        <span className="truncate">
+                          @{relatedPost.authorName}
+                        </span>
                         <div className="flex items-center space-x-3 flex-shrink-0">
                           <div className="flex items-center space-x-1">
                             <ArrowUp className="h-3 w-3" />
@@ -465,5 +531,5 @@ export default function PostPage() {
         onClose={() => setSelectedImage(null)}
       />
     </div>
-  )
+  );
 }
