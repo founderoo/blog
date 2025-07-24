@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { collection, query, where, orderBy, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
-import { Edit, Trash2, Clock, ArrowUp, MessageCircle } from "lucide-react"
+import { Edit, Trash2, Clock, ArrowUp, MessageCircle, User, Calendar, Mail, PenTool, Plus, Eye } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import ImageUpload from "@/components/ImageUpload"
 
 interface Post {
   id: string
@@ -147,6 +148,9 @@ export default function AccountPage() {
     return `${minutes} min remaining`
   }
 
+  const totalLikes = userPosts.reduce((sum, post) => sum + post.likes, 0)
+  const totalComments = userPosts.reduce((sum, post) => sum + post.comments, 0)
+
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -171,12 +175,45 @@ export default function AccountPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        {/* Profile Section */}
+        {/* Profile Header */}
         <div className="bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-6 mb-8">
-          <h1 className="text-3xl font-bold mb-6">My Account</h1>
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <div className="flex flex-col items-center space-y-4">
+              <ImageUpload
+                currentImageUrl={userProfile?.photoURL}
+                onUploadSuccess={(url: string) => updateUserProfile({ photoURL: url })}
+                className="mb-2"
+              />
+              <h1 className="text-3xl font-bold">{userProfile?.displayName}</h1>
+              <p className="text-gray-600 dark:text-gray-400">{userProfile?.email}</p>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
+            <div className="flex-1 text-center md:text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">{userPosts.length}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Posts</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">{totalLikes}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Likes</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">{totalComments}</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Comments</div>
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                Member since {formatDate(userProfile?.createdAt)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Profile Information */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-6 mb-6">
               <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
               <div className="space-y-4">
                 <div>
@@ -194,7 +231,8 @@ export default function AccountPage() {
               </div>
             </div>
 
-            <div>
+            {/* About Me Section */}
+            <div className="bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">About Me</h2>
                 <button
@@ -237,135 +275,137 @@ export default function AccountPage() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* My Posts Section */}
-        <div className="bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold">My Posts ({userPosts.length})</h2>
-            <Link
-              href="/create"
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition-colors"
-            >
-              Create New Post
-            </Link>
-          </div>
-
-          {userPosts.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600 dark:text-gray-400 mb-4">You haven't created any posts yet.</p>
-              <Link href="/create" className="text-purple-600 hover:text-purple-700 transition-colors">
-                Create your first post
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {userPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow"
+          {/* Posts Section */}
+          <div className="lg:col-span-2">
+            <div className="bg-white dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold">My Posts ({userPosts.length})</h2>
+                <Link
+                  href="/create"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition-colors"
                 >
-                  {editingPost === post.id ? (
-                    <div className="space-y-4">
-                      <input
-                        type="text"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800"
-                      />
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        rows={6}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800"
-                      />
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleUpdatePost(post.id)}
-                          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition-colors"
-                        >
-                          Save Changes
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingPost(null)
-                            setEditTitle("")
-                            setEditContent("")
-                          }}
-                          className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <Link href={`/post/${post.id}`}>
-                            <h3 className="font-semibold text-lg hover:text-purple-600 transition-colors cursor-pointer">
-                              {post.title}
-                            </h3>
-                          </Link>
-                          <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400 mt-1">
-                            <span>{formatDate(post.createdAt)}</span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
-                              {post.category}
-                            </span>
-                            {post.isEditable && (
-                              <div className="flex items-center space-x-1 text-green-600">
-                                <Clock className="h-3 w-3" />
-                                <span className="text-xs">{getTimeRemaining(post.createdAt)}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                  Create New Post
+                </Link>
+              </div>
 
-                        <div className="flex items-center space-x-2">
-                          {post.isEditable && (
-                            <button
-                              onClick={() => handleEditPost(post)}
-                              className="text-purple-600 hover:text-purple-700 transition-colors"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleDeletePost(post.id)}
-                            className="text-red-600 hover:text-red-700 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="text-gray-600 dark:text-gray-400 mb-3 line-clamp-3">{post.content}</p>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
-                          <div className="flex items-center space-x-1">
-                            <ArrowUp className="h-4 w-4" />
-                            <span>{post.likes} likes</span>
-                          </div>
-                          <div className="flex items-center space-x-1">
-                            <MessageCircle className="h-4 w-4" />
-                            <span>{post.comments} comments</span>
-                          </div>
-                        </div>
-
-                        <Link
-                          href={`/post/${post.id}`}
-                          className="text-purple-600 hover:text-purple-700 transition-colors text-sm"
-                        >
-                          View Post
-                        </Link>
-                      </div>
-                    </>
-                  )}
+              {userPosts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">You haven't created any posts yet.</p>
+                  <Link href="/create" className="text-purple-600 hover:text-purple-700 transition-colors">
+                    Create your first post
+                  </Link>
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-4">
+                  {userPosts.map((post) => (
+                    <div
+                      key={post.id}
+                      className="border border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:shadow-md transition-all hover:border-purple-200 dark:hover:border-purple-800"
+                    >
+                      {editingPost === post.id ? (
+                        <div className="space-y-4">
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800"
+                          />
+                          <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={6}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-800"
+                          />
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleUpdatePost(post.id)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md transition-colors"
+                            >
+                              Save Changes
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingPost(null)
+                                setEditTitle("")
+                                setEditContent("")
+                              }}
+                              className="border border-gray-300 dark:border-gray-600 px-4 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <Link href={`/post/${post.id}`}>
+                                <h3 className="font-semibold text-lg hover:text-purple-600 transition-colors cursor-pointer">
+                                  {post.title}
+                                </h3>
+                              </Link>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                <span>{formatDate(post.createdAt)}</span>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                                  {post.category}
+                                </span>
+                                {post.isEditable && (
+                                  <div className="flex items-center space-x-1 text-green-600">
+                                    <Clock className="h-3 w-3" />
+                                    <span className="text-xs">{getTimeRemaining(post.createdAt)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              {post.isEditable && (
+                                <button
+                                  onClick={() => handleEditPost(post)}
+                                  className="text-purple-600 hover:text-purple-700 transition-colors"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeletePost(post.id)}
+                                className="text-red-600 hover:text-red-700 transition-colors"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <p className="text-gray-600 dark:text-gray-400 mb-3 line-clamp-3">{post.content}</p>
+
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+                              <div className="flex items-center space-x-1">
+                                <ArrowUp className="h-4 w-4" />
+                                <span>{post.likes} likes</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <MessageCircle className="h-4 w-4" />
+                                <span>{post.comments} comments</span>
+                              </div>
+                            </div>
+
+                            <Link
+                              href={`/post/${post.id}`}
+                              className="text-purple-600 hover:text-purple-700 transition-colors text-sm"
+                            >
+                              View Post
+                            </Link>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

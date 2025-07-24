@@ -17,7 +17,9 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { doc as firestoreDoc, getDoc as firestoreGetDoc } from "firebase/firestore";
 import { MessageCircle, ArrowUp, Reply, Edit, Send } from "lucide-react";
+import UserAvatar from "./UserAvatar";
 
 interface Comment {
   id: string;
@@ -135,11 +137,23 @@ export default function Comments({
 
     setSubmitting(true);
     try {
+      // Get user profile from Firestore to get the updated photoURL
+      let userAvatar = user.photoURL;
+      try {
+        const userProfileDoc = await firestoreGetDoc(firestoreDoc(db, "users", user.uid));
+        if (userProfileDoc.exists()) {
+          const profileData = userProfileDoc.data();
+          userAvatar = profileData.photoURL || user.photoURL;
+        }
+      } catch (error) {
+        console.log("Could not fetch user profile, using default avatar");
+      }
+
       const commentData = {
         postId,
         userId: user.uid,
         userName: user.displayName || user.email?.split("@")[0] || "Anonymous",
-        userAvatar: user.photoURL || null,
+        userAvatar: userAvatar || null,
         content: newComment.trim(),
         createdAt: serverTimestamp(),
         likes: 0,
@@ -176,11 +190,23 @@ export default function Comments({
 
     setSubmitting(true);
     try {
+      // Get user profile from Firestore to get the updated photoURL
+      let userAvatar = user.photoURL;
+      try {
+        const userProfileDoc = await firestoreGetDoc(firestoreDoc(db, "users", user.uid));
+        if (userProfileDoc.exists()) {
+          const profileData = userProfileDoc.data();
+          userAvatar = profileData.photoURL || user.photoURL;
+        }
+      } catch (error) {
+        console.log("Could not fetch user profile, using default avatar");
+      }
+
       const replyData = {
         postId,
         userId: user.uid,
         userName: user.displayName || user.email?.split("@")[0] || "Anonymous",
-        userAvatar: user.photoURL || null,
+        userAvatar: userAvatar || null,
         content: replyContent.trim(),
         createdAt: serverTimestamp(),
         likes: 0,
@@ -507,19 +533,7 @@ export default function Comments({
           <form onSubmit={handleSubmitComment} className="mb-6">
             <div className="flex space-x-3">
               <div className="flex-shrink-0">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || "You"}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-900/50 flex items-center justify-center text-xs font-medium text-purple-600 dark:text-purple-300">
-                    {getInitials(
-                      user.displayName || user.email?.split("@")[0] || "You"
-                    )}
-                  </div>
-                )}
+                <UserAvatar user={user} size={32} />
               </div>
               <div className="flex-1">
                 <textarea

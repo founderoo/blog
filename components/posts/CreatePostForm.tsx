@@ -182,15 +182,6 @@ export default function CreatePostForm() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-3xl font-bold mb-8">Create New Post</h1>
 
-        {/* Debug Info (remove in production) */}
-        <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-          <h3 className="font-semibold mb-2">Debug Info:</h3>
-          <p>User: {user?.email || 'No user'}</p>
-          <p>Firebase Configured: {isFirebaseConfigured ? 'Yes' : 'No'}</p>
-          <p>DB Available: {db ? 'Yes' : 'No'}</p>
-          <p>Cloudinary Cloud: {process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'Not set'}</p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
             <div className="bg-red-100 dark:bg-red-900/50 border border-red-400 text-red-700 dark:text-red-300 px-4 py-3 rounded">

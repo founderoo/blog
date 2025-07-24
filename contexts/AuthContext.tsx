@@ -28,6 +28,7 @@ interface UserProfile {
   email: string
   displayName: string
   aboutMe: string
+  photoURL?: string
   createdAt: Date
 }
 
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: user.email!,
       displayName,
       aboutMe: "",
+      photoURL: user.photoURL || undefined,
       createdAt: new Date(),
     }
 

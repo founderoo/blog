@@ -126,11 +126,24 @@ export default function PostPage() {
   };
 
   const incrementViewCount = async () => {
+    if (!user) return; // Only count views for logged-in users
+    
     try {
       const postRef = doc(db, "posts", postId);
-      await updateDoc(postRef, {
-        views: increment(1),
-      });
+      const postDoc = await getDoc(postRef);
+      
+      if (postDoc.exists()) {
+        const postData = postDoc.data();
+        const viewedBy = postData.viewedBy || [];
+        
+        // Only increment if user hasn't viewed this post before
+        if (!viewedBy.includes(user.uid)) {
+          await updateDoc(postRef, {
+            views: increment(1),
+            viewedBy: arrayUnion(user.uid),
+          });
+        }
+      }
     } catch (error) {
       console.error("Error incrementing view count:", error);
     }

@@ -12,6 +12,7 @@ import {
   arrayUnion,
   arrayRemove,
   increment,
+  startAfter,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import ImageModal from "@/components/ImageModal";
+import SearchBar from "@/components/SearchBar";
 
 interface Post {
   id: string;
@@ -46,8 +48,12 @@ interface Post {
 
 export default function HomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [allPosts, setAllPosts] = useState<Post[]>([]);
+  const [latestPosts, setLatestPosts] = useState<Post[]>([]);
+  const [feedPosts, setFeedPosts] = useState<Post[]>([]);
   const [featuredPost, setFeaturedPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<{
     src: string;
@@ -55,6 +61,11 @@ export default function HomePage() {
   } | null>(null);
   const [hoveredPost, setHoveredPost] = useState<string | null>(null);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [categories, setCategories] = useState<string[]>([]);
   const { user, isFirebaseConfigured } = useAuth();
 
   useEffect(() => {
@@ -81,7 +92,7 @@ export default function HomePage() {
       const postsQuery = query(
         collection(db, "posts"),
         orderBy("createdAt", "desc"),
-        limit(20)
+        limit(10)
       );
 
       const snapshot = await getDocs(postsQuery);
@@ -91,9 +102,43 @@ export default function HomePage() {
       })) as Post[];
 
       setPosts(postsData);
-      if (postsData.length > 0) {
-        setFeaturedPost(postsData[0]);
+      setAllPosts(postsData);
+
+      // Extract unique categories
+      const uniqueCategories = Array.from(new Set(postsData.map(post => post.category).filter(Boolean)));
+      setCategories(uniqueCategories);
+
+      // Filter posts by age (1 hour = 3600000 milliseconds)
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 3600000);
+      
+      const recentPosts: Post[] = [];
+      const olderPosts: Post[] = [];
+
+      postsData.forEach(post => {
+        const postDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
+        if (postDate >= oneHourAgo) {
+          recentPosts.push(post);
+        } else {
+          olderPosts.push(post);
+        }
+      });
+
+      setLatestPosts(recentPosts);
+      setFeedPosts(olderPosts);
+
+      // Set featured post from recent posts if available, otherwise from older posts
+      if (recentPosts.length > 0) {
+        setFeaturedPost(recentPosts[0]);
+      } else if (olderPosts.length > 0) {
+        setFeaturedPost(olderPosts[0]);
       }
+
+      if (postsData.length > 0) {
+        setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
+      }
+      
+      setHasMore(postsData.length === 10);
     } catch (error) {
       console.error("Error fetching posts:", error);
       setError("Failed to load posts");
@@ -101,6 +146,76 @@ export default function HomePage() {
       setLoading(false);
     }
   };
+
+  const loadMorePosts = async () => {
+    if (!hasMore || loadingMore || !lastVisible || !isFirebaseConfigured || !db) return;
+
+    setLoadingMore(true);
+    try {
+      const morePostsQuery = query(
+        collection(db, "posts"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastVisible),
+        limit(10)
+      );
+
+      const snapshot = await getDocs(morePostsQuery);
+      const newPosts = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Post[];
+
+      if (newPosts.length > 0) {
+        setPosts(prev => [...prev, ...newPosts]);
+        setAllPosts(prev => [...prev, ...newPosts]);
+
+        // Update categories
+        const newCategories = Array.from(new Set(newPosts.map(post => post.category).filter(Boolean)));
+        setCategories(prev => Array.from(new Set([...prev, ...newCategories])));
+
+        // Filter new posts by age
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - 3600000);
+        
+        const newRecentPosts: Post[] = [];
+        const newOlderPosts: Post[] = [];
+
+        newPosts.forEach(post => {
+          const postDate = post.createdAt?.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
+          if (postDate >= oneHourAgo) {
+            newRecentPosts.push(post);
+          } else {
+            newOlderPosts.push(post);
+          }
+        });
+
+        setLatestPosts(prev => [...prev, ...newRecentPosts]);
+        setFeedPosts(prev => [...prev, ...newOlderPosts]);
+
+        setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
+        setHasMore(newPosts.length === 10);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Error loading more posts:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Infinite scroll logic
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + document.documentElement.scrollTop
+          >= document.documentElement.offsetHeight - 1000) {
+        loadMorePosts();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasMore, loadingMore, lastVisible, isFirebaseConfigured]);
 
   const handleLike = async (postId: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -266,6 +381,38 @@ export default function HomePage() {
     }
   };
 
+  // Filter posts based on search term and category
+  const filterPosts = (postsToFilter: Post[]) => {
+    return postsToFilter.filter(post => {
+      const matchesSearch = searchTerm === "" ||
+        post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        post.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        post.authorName.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesCategory = selectedCategory === "all" || post.category === selectedCategory;
+      
+      return matchesSearch && matchesCategory;
+    });
+  };
+
+  // Apply filters to posts
+  const filteredLatestPosts = filterPosts(latestPosts);
+  const filteredFeedPosts = filterPosts(feedPosts);
+  const filteredFeaturedPost = featuredPost && (filterPosts([featuredPost]).length > 0) ? featuredPost : null;
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSelectedCategory("all");
+  };
+
   // Show loading spinner while loading
   if (loading) {
     return (
@@ -318,13 +465,23 @@ export default function HomePage() {
 
   return (
     <div className="container mx-auto px-4 py-4 md:py-8">
+      {/* Search Bar */}
+      <SearchBar
+        searchTerm={searchTerm}
+        selectedCategory={selectedCategory}
+        categories={categories}
+        onSearchChange={handleSearchChange}
+        onCategoryChange={handleCategoryChange}
+        onClearFilters={clearFilters}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8">
         {/* Left Sidebar - Latest Posts */}
         <div className="lg:col-span-3 lg:order-1 order-2">
           <div className="space-y-4 md:space-y-6">
-            <h2 className="text-lg md:text-xl font-bold">Latest Posts</h2>
+            <h2 className="text-lg md:text-xl font-bold">Latest Posts (Last Hour)</h2>
             <div className="space-y-3 md:space-y-4">
-              {posts.slice(1).map((post) => (
+              {filteredLatestPosts.length > 0 ? filteredLatestPosts.filter(post => filteredFeaturedPost?.id !== post.id).map((post) => (
                 <div
                   key={post.id}
                   className="relative rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
@@ -371,114 +528,224 @@ export default function HomePage() {
                     </div>
                   )}
                 </div>
-              ))}
+              )) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {searchTerm || selectedCategory !== "all"
+                      ? "No recent posts match your filters"
+                      : "No posts from the last hour"}
+                  </p>
+                </div>
+              )}
             </div>
+
           </div>
         </div>
 
-        {/* Featured Post */}
+        {/* Featured Post and Feed */}
         <div className="lg:col-span-6 lg:order-2 order-1">
-          {featuredPost && (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 shadow-sm overflow-hidden">
-              {featuredPost.images && featuredPost.images.length > 0 && (
-                <div className="relative h-48 md:h-64 lg:h-80">
-                  <img
-                    src={featuredPost.images[0]}
-                    alt={featuredPost.title}
-                    className="w-full h-full object-cover cursor-pointer"
-                    onClick={() =>
-                      setSelectedImage({
-                        src: featuredPost.images[0],
-                        alt: featuredPost.title,
-                      })
-                    }
-                  />
-                </div>
-              )}
-              <Link href={`/post/${featuredPost.id}`} className="block">
-                <div className="p-4 md:p-6">
-                  <div className="flex items-center space-x-2 mb-2">
-                    {featuredPost.category && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
-                        {featuredPost.category}
-                      </span>
+          <div className="space-y-6">
+            {/* Featured Post */}
+            {filteredFeaturedPost && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 shadow-sm overflow-hidden">
+                {filteredFeaturedPost.images && filteredFeaturedPost.images.length > 0 && (
+                  <div className="relative h-48 md:h-64 lg:h-80">
+                    <img
+                      src={filteredFeaturedPost.images[0]}
+                      alt={filteredFeaturedPost.title}
+                      className="w-full h-full object-cover cursor-pointer"
+                      onClick={() =>
+                        setSelectedImage({
+                          src: filteredFeaturedPost.images[0],
+                          alt: filteredFeaturedPost.title,
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                <Link href={`/post/${filteredFeaturedPost.id}`} className="block">
+                  <div className="p-4 md:p-6">
+                    <div className="flex items-center space-x-2 mb-2">
+                      {filteredFeaturedPost.category && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                          {filteredFeaturedPost.category}
+                        </span>
+                      )}
+                    </div>
+                    <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 hover:text-purple-600 transition-colors">
+                      {filteredFeaturedPost.title}
+                    </h1>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      by @{filteredFeaturedPost.authorName}
+                      {filteredFeaturedPost.createdAt && (
+                        <span className="ml-2">
+                          • {formatDate(filteredFeaturedPost.createdAt)}
+                        </span>
+                      )}
+                    </p>
+                    {filteredFeaturedPost.content && (
+                      <p className="text-gray-600 dark:text-gray-400 mb-4 md:mb-6 text-sm md:text-base">
+                        {getSummary(filteredFeaturedPost.content)}
+                      </p>
+                    )}
+
+                    {/* AI Summary Section */}
+                    {filteredFeaturedPost.content && (
+                      <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3 mb-4">
+                        <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">
+                          AI Summary (TL;DR)
+                        </div>
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          {getSummary(filteredFeaturedPost.content)}
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-2 hover:text-purple-600 transition-colors">
-                    {featuredPost.title}
-                  </h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    by @{featuredPost.authorName}
-                    {featuredPost.createdAt && (
-                      <span className="ml-2">
-                        • {formatDate(featuredPost.createdAt)}
-                      </span>
-                    )}
-                  </p>
-                  {featuredPost.content && (
-                    <p className="text-gray-600 dark:text-gray-400 mb-4 md:mb-6 text-sm md:text-base">
-                      {getSummary(featuredPost.content)}
-                    </p>
-                  )}
+                </Link>
 
-                  {/* AI Summary Section */}
-                  {featuredPost.content && (
-                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3 mb-4">
-                      <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-1">
-                        AI Summary (TL;DR)
-                      </div>
-                      <div className="text-sm text-gray-700 dark:text-gray-300">
-                        {getSummary(featuredPost.content)}
-                      </div>
+                <div className="px-4 md:px-6 pb-4 md:pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex items-center space-x-4 md:space-x-6">
+                      <button
+                        onClick={(e) => handleLike(filteredFeaturedPost.id, e)}
+                        className={`flex items-center space-x-2 hover:text-purple-600 transition-colors ${
+                          user && filteredFeaturedPost.likedBy?.includes(user.uid)
+                            ? "text-purple-600"
+                            : ""
+                        }`}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                        <span className="font-medium text-sm md:text-base">
+                          {filteredFeaturedPost.likes || 0} upvotes
+                        </span>
+                      </button>
+                      <Link
+                        href={`/post/${filteredFeaturedPost.id}`}
+                        className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        <span className="text-sm md:text-base">
+                          {filteredFeaturedPost.comments || 0} comments
+                        </span>
+                      </Link>
+                      <button
+                        onClick={(e) => handleShare(filteredFeaturedPost.id, e)}
+                        className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
+                      >
+                        <Share className="h-4 w-4" />
+                        <span className="text-sm md:text-base">Share</span>
+                      </button>
+                      <button
+                        onClick={(e) => handleReport(filteredFeaturedPost.id, e)}
+                        className="flex items-center space-x-2 hover:text-red-600 transition-colors"
+                      >
+                        <Flag className="h-4 w-4" />
+                        <span className="text-sm md:text-base">Report</span>
+                      </button>
                     </div>
-                  )}
-                </div>
-              </Link>
-
-              <div className="px-4 md:px-6 pb-4 md:pb-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="flex items-center space-x-4 md:space-x-6">
-                    <button
-                      onClick={(e) => handleLike(featuredPost.id, e)}
-                      className={`flex items-center space-x-2 hover:text-purple-600 transition-colors ${
-                        user && featuredPost.likedBy?.includes(user.uid)
-                          ? "text-purple-600"
-                          : ""
-                      }`}
-                    >
-                      <ArrowUp className="h-4 w-4" />
-                      <span className="font-medium text-sm md:text-base">
-                        {featuredPost.likes || 0} upvotes
-                      </span>
-                    </button>
-                    <Link
-                      href={`/post/${featuredPost.id}`}
-                      className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      <span className="text-sm md:text-base">
-                        {featuredPost.comments || 0} comments
-                      </span>
-                    </Link>
-                    <button
-                      onClick={(e) => handleShare(featuredPost.id, e)}
-                      className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
-                    >
-                      <Share className="h-4 w-4" />
-                      <span className="text-sm md:text-base">Share</span>
-                    </button>
-                    <button
-                      onClick={(e) => handleReport(featuredPost.id, e)}
-                      className="flex items-center space-x-2 hover:text-red-600 transition-colors"
-                    >
-                      <Flag className="h-4 w-4" />
-                      <span className="text-sm md:text-base">Report</span>
-                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Feed Posts */}
+            {filteredFeedPosts.length > 0 && (
+              <div className="space-y-6">
+                {filteredFeedPosts.filter(post => filteredFeaturedPost?.id !== post.id).map((post) => (
+                  <div
+                    key={post.id}
+                    className="rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/50 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                  >
+                    {post.images && post.images.length > 0 && (
+                      <div className="relative h-48 md:h-64">
+                        <img
+                          src={post.images[0]}
+                          alt={post.title}
+                          className="w-full h-full object-cover cursor-pointer"
+                          onClick={() =>
+                            setSelectedImage({
+                              src: post.images[0],
+                              alt: post.title,
+                            })
+                          }
+                        />
+                      </div>
+                    )}
+                    <Link href={`/post/${post.id}`} className="block">
+                      <div className="p-4 md:p-6">
+                        <div className="flex items-center space-x-2 mb-2">
+                          {post.category && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                              {post.category}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-lg md:text-xl font-bold mb-2 hover:text-purple-600 transition-colors">
+                          {post.title}
+                        </h2>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          by @{post.authorName}
+                          {post.createdAt && (
+                            <span className="ml-2">
+                              • {formatDate(post.createdAt)}
+                            </span>
+                          )}
+                        </p>
+                        {post.content && (
+                          <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm md:text-base">
+                            {getSummary(post.content)}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+
+                    <div className="px-4 md:px-6 pb-4 md:pb-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center space-x-4 md:space-x-6">
+                          <button
+                            onClick={(e) => handleLike(post.id, e)}
+                            className={`flex items-center space-x-2 hover:text-purple-600 transition-colors ${
+                              user && post.likedBy?.includes(user.uid)
+                                ? "text-purple-600"
+                                : ""
+                            }`}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                            <span className="font-medium text-sm md:text-base">
+                              {post.likes || 0} upvotes
+                            </span>
+                          </button>
+                          <Link
+                            href={`/post/${post.id}`}
+                            className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            <span className="text-sm md:text-base">
+                              {post.comments || 0} comments
+                            </span>
+                          </Link>
+                          <button
+                            onClick={(e) => handleShare(post.id, e)}
+                            className="flex items-center space-x-2 hover:text-purple-600 transition-colors"
+                          >
+                            <Share className="h-4 w-4" />
+                            <span className="text-sm md:text-base">Share</span>
+                          </button>
+                          <button
+                            onClick={(e) => handleReport(post.id, e)}
+                            className="flex items-center space-x-2 hover:text-red-600 transition-colors"
+                          >
+                            <Flag className="h-4 w-4" />
+                            <span className="text-sm md:text-base">Report</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Sidebar */}
@@ -528,7 +795,11 @@ export default function HomePage() {
                   Most popular posts this week.
                 </p>
                 <div className="space-y-4">
-                  {posts.slice(0, 3).map((post, index) => (
+                  {posts
+                    .slice()
+                    .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+                    .slice(0, 3)
+                    .map((post, index) => (
                     <Link key={post.id} href={`/post/${post.id}`}>
                       <div className="flex items-start space-x-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 -m-2 rounded-lg transition-colors">
                         <span className="inline-flex items-center rounded-full border border-gray-200 dark:border-gray-700 px-2.5 py-0.5 text-xs font-semibold">
@@ -563,6 +834,26 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="text-center mt-8">
+          <button
+            onClick={loadMorePosts}
+            disabled={loadingMore}
+            className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+          >
+            {loadingMore ? (
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Loading more posts...</span>
+              </div>
+            ) : (
+              'Load More Posts'
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Image Modal */}
       <ImageModal
