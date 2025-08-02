@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext"
 import Layout from "@/components/Layout"
 import "./globals.css"
 
+
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
@@ -26,7 +27,9 @@ export default function RootLayout({
             <Layout>{children}</Layout>
           </AuthProvider>
         </ThemeProvider>
+       
       </body>
     </html>
   )
 }
+

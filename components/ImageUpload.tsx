@@ -1,6 +1,5 @@
-"use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Upload, Loader2 } from "lucide-react"
 import { uploadImageToCloudinary } from "@/utils/uploadToCloudinary"
 import CloudinaryImage from "./CloudinaryImage"
