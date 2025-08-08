@@ -1,50 +1,44 @@
 "use client";
 
 export default function HomePage() {
-  return (
-    <div className="h-screen w-screen overflow-hidden bg-white dark:bg-gray-900">
-      {/* Mobile: Full Screen iframe, Desktop: Header + iframe */}
-      <div className="h-full w-full flex flex-col">
+    return (
+        <div className="h-screen w-screen bg-white dark:bg-gray-900">
+            {/* Simple container for the iframe */}
+            <div className="h-full w-full">
+                <iframe
+                    src="https://widgets.sociablekit.com/linkedin-newsletter/iframe/25586380"
+                    frameBorder="0"
+                    width="100%"
+                    height="100%"
+                    className="w-full h-full block"
+                    title="LinkedIn Posts"
+                    style={{
+                        border: 'none',
+                        margin: 0,
+                        padding: 0
+                    }}
+                />
+            </div>
 
-        {/* Full Screen LinkedIn Widget */}
-        <div className="flex-1 w-full">
-          <iframe
-            src="https://widgets.sociablekit.com/linkedin-page-posts/iframe/25584496"
-            frameBorder="0"
-            width="100%"
-            height="100%"
-            className="w-full h-full"
-            title="LinkedIn Posts"
-            loading="lazy"
-            style={{
-              border: 'none',
-              margin: 0,
-              padding: 0
-            }}
-          />
-        </div>
-
+            {/* Simplified global styles */}
+            <style jsx global>{`
+        html, body {
+          margin: 0;
+          padding: 0;
+          height: 100%;
+          overflow: hidden;
+        }
         
-      </div>
-
-      {/* Global styles for mobile full screen */}
-      <style jsx global>{`
-        @media (max-width: 767px) {
-          body {
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
-          
-          html {
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
+        #__next {
+          height: 100%;
+        }
+        
+        * {
+          box-sizing: border-box;
         }
       `}</style>
-    </div>
-  );
+        </div>
+    );
 }
 
 
